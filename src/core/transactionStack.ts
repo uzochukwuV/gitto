@@ -37,8 +37,8 @@ export class TransactionStack {
 
     // Initialize components
     this.streamingManager = new StreamingManager({
-      rpcUrl: config.rpcUrl,
-      commitment: config.targetCommitment
+      endpoint: config.geyserUrl,
+      token: config.geyserToken
     });
 
     // Agent will be initialized after bundle manager
