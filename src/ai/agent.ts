@@ -31,6 +31,7 @@ export class TransactionAgent {
 
   /**
    * Main decision-making method - analyzes current state and makes a decision
+   * with multi-step chain-of-thought reasoning
    */
   async makeDecision(context: {
     currentSlot: number;
@@ -43,69 +44,100 @@ export class TransactionAgent {
     targetSlot?: number;
     retryCount?: number;
   }): Promise<AgentDecision> {
+    // Build step-by-step reasoning chain
+    const reasoningChain: string[] = [];
+    
     logger.info('Agent analyzing decision context', context);
+    reasoningChain.push(`[Step 1] Current state: slot=${context.currentSlot}, blockhashAge=${context.blockhashAgeMs}ms, pending=${context.pendingTxCount}`);
 
     // Decision 1: Check if we should wait for a specific leader
     if (context.nextLeaderSlot && context.currentSlot < context.nextLeaderSlot - 5) {
       const waitSlots = context.nextLeaderSlot - context.currentSlot - 5;
+      reasoningChain.push(`[Step 2] Leader analysis: Next leader at slot ${context.nextLeaderSlot} (in ${waitSlots} slots). Waiting optimizes landing probability.`);
+      reasoningChain.push(`[Decision] WAIT - Position for leader window`);
       return this.createDecision(
         'wait',
         `Waiting for leader slot ${context.nextLeaderSlot} (current: ${context.currentSlot})`,
         0.9,
-        { waitSlots }
+        { waitSlots },
+        reasoningChain
       );
     }
+    reasoningChain.push(`[Step 2] Leader analysis: Current or past leader window - proceeding`);
 
     // Decision 2: Check for blockhash expiration risk
     if (context.blockhashAgeMs > this.config.blockhashRefreshBeforeMs) {
+      const riskLevel = context.blockhashAgeMs > 58000 ? 'HIGH' : 'MEDIUM';
+      reasoningChain.push(`[Step 3] Blockhash age: ${context.blockhashAgeMs}ms (threshold: ${this.config.blockhashRefreshBeforeMs}ms) - Risk: ${riskLevel}`);
+      reasoningChain.push(`[Decision] REFRESH_BLOCKHASH - Blockhash expiring soon, must refresh`);
       return this.createDecision(
         'refresh_blockhash',
         `Blockhash is ${context.blockhashAgeMs}ms old, approaching expiration`,
         0.95,
-        {}
+        {},
+        reasoningChain
       );
     }
+    reasoningChain.push(`[Step 3] Blockhash age: ${context.blockhashAgeMs}ms - Safe (within 55s threshold)`);
 
     // Decision 3: Check for recent failures
     if (context.recentFailures.length > 0) {
+      reasoningChain.push(`[Step 4] Failure analysis: ${context.recentFailures.length} recent failures - ${context.recentFailures.join(', ')}`);
       const lastFailure = context.recentFailures[context.recentFailures.length - 1];
       const retryDecision = await this.analyzeFailureAndDecide(lastFailure, {
-        retryCount: context.retryCount || 0,
+        retryCount: context.recentFailures.length,
         currentSlot: context.currentSlot,
         blockhashAgeMs: context.blockhashAgeMs
       });
       if (retryDecision) {
-        return retryDecision;
+        reasoningChain.push(`[Decision] ${retryDecision.type.toUpperCase()} - Failure-adjusted action`);
+        return { ...retryDecision, reasoning: reasoningChain };
       }
+    } else {
+      reasoningChain.push(`[Step 4] Failure analysis: No recent failures - clean slate`);
     }
 
     // Decision 4: Check network health
     if (context.networkHealth.processedToConfirmedDelta > 10000) {
+      reasoningChain.push(`[Step 5] Network health: processed→confirmed delta ${context.networkHealth.processedToConfirmedDelta}ms (threshold: 10000ms) - DEGRADED`);
+      reasoningChain.push(`[Decision] WAIT - Network under stress, reduce submission rate`);
       return this.createDecision(
         'wait',
         `Network health poor: ${context.networkHealth.processedToConfirmedDelta}ms processed-to-confirmed delta`,
         0.8,
-        { waitSlots: 10 }
+        { waitSlots: 10 },
+        reasoningChain
       );
     }
+    const healthStatus = context.networkHealth.processedToConfirmedDelta > 5000 ? 'ELEVATED' : 'NORMAL';
+    reasoningChain.push(`[Step 5] Network health: Delta ${context.networkHealth.processedToConfirmedDelta}ms - Status: ${healthStatus}`);
 
     // Decision 5: Adjust tip based on conditions
     const suggestedTip = await this.calculateOptimalTip(context);
     if (suggestedTip !== this.config.defaultTipAmount) {
+      const tipAdjustment = ((suggestedTip - this.config.defaultTipAmount) / this.config.defaultTipAmount * 100).toFixed(0);
+      reasoningChain.push(`[Step 6] Tip analysis: Base=${this.config.defaultTipAmount}, Suggested=${suggestedTip} (${Number(tipAdjustment) > 0 ? '+' : ''}${tipAdjustment}%)`);
+      reasoningChain.push(`[Decision] ADJUST_TIP - Tip calibration for current conditions`);
       return this.createDecision(
         'adjust_tip',
         `Adjusted tip to ${suggestedTip} based on conditions`,
         0.75,
-        { tipAmount: suggestedTip }
+        { tipAmount: suggestedTip },
+        reasoningChain
       );
     }
+    reasoningChain.push(`[Step 6] Tip analysis: Current ${suggestedTip} lamports is optimal`);
 
     // Default: Submit
+    reasoningChain.push(`[Final] All checks passed: Blockhash fresh, network healthy, no failures`);
+    reasoningChain.push(`[Decision] SUBMIT - All conditions favorable`);
+    
     return this.createDecision(
       'submit',
       'All conditions favorable for submission',
       0.85,
-      {}
+      {},
+      reasoningChain
     );
   }
 
@@ -324,13 +356,15 @@ export class TransactionAgent {
     type: AgentDecision['type'],
     reason: string,
     confidence: number,
-    action: AgentDecision['action']
+    action: AgentDecision['action'],
+    reasoningChain?: string[]
   ): AgentDecision {
     const decision: AgentDecision = {
       type,
       reason,
       confidence,
       action,
+      reasoning: reasoningChain || [reason],
       timestamp: new Date()
     };
 
@@ -341,7 +375,7 @@ export class TransactionAgent {
       this.decisionHistory.shift();
     }
 
-    logger.info('Agent made decision', { type, reason, confidence });
+    logger.info('Agent made decision', { type, reason, confidence, reasoning: decision.reasoning });
 
     return decision;
   }
