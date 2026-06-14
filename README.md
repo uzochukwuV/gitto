@@ -420,6 +420,8 @@ https://explorer.solana.com/tx/4ZW1tzotRM1eEZDoQK7Hdej3gweg7x3gAniJ3Qt9pL2rvYttv
 | **4. AI Agent** | ✅ Complete | Chain-of-thought reasoning implemented |
 | **5. README Questions** | ✅ Complete | 3 questions answered with real observations |
 
+https://west-hearing-080.notion.site/Jitto-37f2f09ff50b80fd8a2fcc99fb373f08?source=copy_link
+
 ### Git History
 
 All commits are pushed to `solana-transaction-stack` branch:
