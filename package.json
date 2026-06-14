@@ -1,0 +1,40 @@
+{
+  "name": "solana-smart-transaction-stack",
+  "version": "1.0.0",
+  "description": "Smart transaction infrastructure stack with Jito bundles, Yellowstone streaming, and AI-assisted decision making",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "demo": "ts-node src/demo.ts",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "solana",
+    "jito",
+    "bundle",
+    "yellowstone",
+    "grpc",
+    "mev",
+    "transaction"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.0",
+    "@solana/web3.js": "^1.91.0",
+    "@triton-one/yellowstone-grpc": "^5.0.9",
+    "dotenv": "^16.4.0",
+    "jito-ts": "^4.2.1",
+    "typescript": "^5.3.0",
+    "winston": "^3.11.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/uuid": "^9.0.0",
+    "ts-node": "^10.9.0"
+  }
+}
