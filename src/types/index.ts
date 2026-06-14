@@ -119,6 +119,7 @@ export interface AgentDecision {
     retryCount?: number;
     waitSlots?: number;
   };
+  reasoning: string[];  // Chain-of-thought reasoning steps
   timestamp: Date;
 }
 
